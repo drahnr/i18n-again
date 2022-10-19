@@ -29,8 +29,6 @@ impl Message {
     }
 }
 
-static METHOD_NAME: &str = "t";
-
 #[allow(clippy::ptr_arg)]
 pub fn extract(results: &mut Results, path: &PathBuf, source: &str) -> Result<(), Error> {
     let mut ex = Extractor { results, path };
@@ -63,7 +61,7 @@ impl<'a> Extractor<'a> {
                         }
                     }
 
-                    if ident == METHOD_NAME && is_macro {
+                    if (ident == "format_t" || ident == "t") && is_macro {
                         if let Some(TokenTree::Group(group)) = token_iter.peek() {
                             self.take_message(group.stream());
                         }

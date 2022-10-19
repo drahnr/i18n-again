@@ -2,11 +2,12 @@
 //! to load and inspect `Cargo.toml` metadata.
 //!
 //! See `Manifest::from_slice`.
+use fs_err as fs;
 use itertools::Itertools;
-use std::fs;
 use std::io;
 use std::io::Read;
 use std::path::Path;
+use i18n_again::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -47,7 +48,7 @@ impl Default for I18nConfig {
     }
 }
 
-pub fn load(cargo_root: &Path) -> io::Result<I18nConfig> {
+pub fn load(cargo_root: &Path) -> Result<I18nConfig> {
     let cargo_file = cargo_root.join("Cargo.toml");
     let mut file = fs::File::open(&cargo_file)
         .unwrap_or_else(|e| panic!("Fail to open {}, {}", cargo_file.display(), e));
@@ -58,7 +59,7 @@ pub fn load(cargo_root: &Path) -> io::Result<I18nConfig> {
     parse(&contents)
 }
 
-pub fn parse(contents: &str) -> io::Result<I18nConfig> {
+pub fn parse(contents: &str) -> Result<I18nConfig> {
     if !contents.contains("[i18n]") && !contents.contains("[package.metadata.i18n]") {
         return Ok(I18nConfig::default());
     }

@@ -1,9 +1,5 @@
-use rust_i18n::t;
+use i18n_again::format_t;
 
-mod info;
-
-rust_i18n::i18n!("locales");
-
-pub fn t(key: &str) -> String {
-    t!(key)
+pub fn f() -> String {
+    format_t!("hello")
 }

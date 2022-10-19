@@ -1,15 +1,21 @@
 [package]
-edition = "2021"
 name = "foo"
-private = true
 version = "0.1.0"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+edition = "2021"
+publish = false
 
 [dependencies]
 once_cell = "1.10.0"
-rust-i18n = {path = "../../../rust-i18n"}
+i18n-again = { path = "../.." }
+fs-err = "2.9"
+
+[dev-dependencies]
+i18n-again-support = { path = "../../crates/support" }
+
+[build-dependencies]
+i18n-again-support = { path = "../../crates/support" }
 
 [package.metadata.i18n]
 available-locales = ["en", "zh-CN"]
 default-locale = "en"
+load-path = "loco"

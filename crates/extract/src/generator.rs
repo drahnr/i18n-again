@@ -1,8 +1,11 @@
 use crate::extractor::Message;
-use rust_i18n_support::{load_locales, Translations};
+use fs_err as fs;
+use i18n_again_support::locales_yaml_files_to_translation_map;
+use i18n_again_support::Error;
+use i18n_again_support::Result;
+use i18n_again_support::Translations;
 use std::collections::HashMap;
 use std::io::prelude::*;
-use std::io::Result;
 use std::path::Path;
 
 pub fn generate<'a, P: AsRef<Path>>(
@@ -15,10 +18,9 @@ pub fn generate<'a, P: AsRef<Path>>(
     // TODO.en.yml
     let filename = format!("TODO.{}.yml", locale);
     // ~/work/my-project/locales
-    let output_path = output.as_ref().display().to_string();
+    let output_path = output.as_ref().to_owned();
 
-    let ignore_file = |fname: &str| fname.ends_with(&filename);
-    let old_translations = load_locales(&output_path, ignore_file);
+    let old_translations = locales_yaml_files_to_translation_map(&output_path)?;
 
     let mut new_translations: Translations = HashMap::new();
     let mut new_values: HashMap<String, String> = HashMap::new();
@@ -59,8 +61,7 @@ pub fn generate<'a, P: AsRef<Path>>(
     write_file(&output, &filename, &new_translations)?;
 
     // Finally, return error for let CI fail
-    let err = std::io::Error::new(std::io::ErrorKind::Other, "");
-    Err(err)
+    Err(Error::SerDe)
 }
 
 fn write_file<'a, P: AsRef<Path>>(
@@ -69,7 +70,7 @@ fn write_file<'a, P: AsRef<Path>>(
     translations: &Translations,
 ) -> Result<()> {
     let output_file = std::path::Path::new(output.as_ref()).join(String::from(filename));
-    let mut output = ::std::fs::File::create(&output_file)
+    let mut output = fs::File::create(&output_file)
         .unwrap_or_else(|_| panic!("Unable to create {} file", &output_file.display()));
 
     writeln!(output, "{}", serde_yaml::to_string(&translations).unwrap())

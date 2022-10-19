@@ -1,76 +1,227 @@
-use quote::quote;
-use rust_i18n_support::{is_debug, load_locales};
+//! Parse the content of `format_t!` arguments
+//!
+//! Required, to filter out `a.b.c` style paths
+//! and avoid erroring for no good reason.
+
+use fs_err as fs;
+use proc_macro2::Ident;
+use proc_macro2::Span;
+use quote::{quote, ToTokens};
 use std::collections::HashMap;
+use syn::Token;
+use syn::{parse::Parse, punctuated::Punctuated, Expr};
 
-#[derive(Debug)]
-struct Option {
-    locales_path: String,
+/// A single argument as passed to `format!`
+///
+/// Skips the initial literal string!
+enum FormatArg {
+    AliasEqIdent {
+        alias: Ident,
+        #[allow(dead_code)]
+        eq: Token![=],
+        ident: Ident,
+    },
+    AliasEqExpr {
+        alias: Ident,
+        #[allow(dead_code)]
+        eq: Token![=],
+        expr: Expr,
+    },
+    Ident {
+        ident: Ident,
+    },
 }
 
-impl syn::parse::Parse for Option {
-    fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
-        let locales_path = input.parse::<syn::LitStr>()?.value();
+use std::fmt;
 
-        Ok(Self { locales_path })
+impl fmt::Debug for FormatArg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ident { ident } => {
+                write!(f, "{ident}")?;
+            }
+            Self::AliasEqIdent { alias, ident, .. } => {
+                write!(f, "{alias} = {ident}")?;
+            }
+            Self::AliasEqExpr { alias, .. } => {
+                write!(f, "{alias} = <expr>")?;
+            }
+        }
+
+        Ok(())
     }
 }
 
-/// Init I18n translations.
-///
-/// This will load all translations by glob `**/*.yml` from the given path.
-///
-/// ```ignore
-/// i18n!("locales");
-/// ```
-#[proc_macro]
-pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let option = match syn::parse::<Option>(input) {
-        Ok(input) => input,
-        Err(err) => return err.to_compile_error().into(),
-    };
+impl syn::parse::Parse for FormatArg {
+    fn parse(input: syn::parse::ParseStream<'_>) -> syn::Result<Self> {
+        let ident = input.parse()?;
 
-    // CARGO_MANIFEST_DIR is current build directory
-    let cargo_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is empty");
-    let current_dir = std::path::PathBuf::from(cargo_dir);
-    let locales_path = current_dir.join(option.locales_path);
+        let lookahead = input.lookahead1();
+        let me = if lookahead.peek(Token![=]) {
+            let eq = input.parse::<Token![=]>()?;
+            let alias = ident;
 
-    let translations = load_locales(&locales_path.display().to_string(), |_| false);
-    let code = generate_code(translations);
-
-    if is_debug() {
-        println!("{}", code.to_string());
-        // panic!("Debug mode, show codegen.");
+            let expr = input.parse::<Expr>().map_err(|_e| {
+                syn::Error::new(
+                    input.span(),
+                    "Expected `Expr` after = since it's not an ident",
+                )
+            })?;
+            Self::AliasEqExpr { alias, eq, expr }
+        } else {
+            Self::Ident { ident }
+        };
+        Ok(me)
     }
-
-    code.into()
 }
 
-fn generate_code(translations: HashMap<String, String>) -> proc_macro2::TokenStream {
-    let mut locales = Vec::<proc_macro2::TokenStream>::new();
+impl ToTokens for FormatArg {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            Self::Ident { ident } => tokens.extend(ident.to_token_stream()),
+            Self::AliasEqExpr { alias, eq, expr } => tokens.extend(quote! { #alias #eq #expr }),
+            Self::AliasEqIdent { alias, eq, ident } => tokens.extend(quote! { #alias #eq #ident }),
+        }
+    }
+}
 
-    translations.iter().for_each(|(k, v)| {
-        let k = k.to_string();
-        let v = v.to_string();
+/// All format arguments.
+///
+/// Including the str literal.
+struct FormatArgs {
+    fmt_str: syn::LitStr,
+    #[allow(dead_code)]
+    maybe_comma: Option<Token![,]>,
+    maybe_args: Punctuated<FormatArg, Token![,]>,
+}
 
-        locales.push(quote! {
-            #k => #v,
-        });
-    });
+impl Parse for FormatArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let lit = input.parse::<syn::Lit>()?;
+        let fmt_str = match lit {
+            syn::Lit::Str(alias) => alias,
+            other => {
+                return Err(syn::Error::new(
+                    other.span(),
+                    "Expected a literal str for format arg but found...",
+                ))
+            }
+        };
+        let lookahead = input.lookahead1();
 
-    // result
-    quote! {
-        static LOCALES: once_cell::sync::Lazy<std::collections::HashMap<&'static str, &'static str>> = once_cell::sync::Lazy::new(|| rust_i18n::map! [
-            #(#locales)*
-            "" => ""
-        ]);
+        if lookahead.peek(Token![,]) {
+            let comma = input.parse::<Token![,]>()?;
 
+            let maybe_comma = Some(comma);
+            let maybe_args = Punctuated::<FormatArg, Token![,]>::parse_terminated(&input)?;
 
-        pub fn translate(locale: &str, key: &str) -> String {
-            let key = format!("{}.{}", locale, key);
-            match LOCALES.get(key.as_str()) {
-                Some(value) => value.to_string(),
-                None => key.to_string(),
+            Ok(Self {
+                fmt_str,
+                maybe_comma,
+                maybe_args,
+            })
+        } else {
+            Ok(Self {
+                fmt_str,
+                maybe_comma: None,
+                maybe_args: Punctuated::new(),
+            })
+        }
+    }
+}
+
+impl ToTokens for FormatArgs {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let FormatArgs {
+            ref fmt_str,
+            maybe_comma,
+            ref maybe_args,
+        } = self;
+        tokens.extend(fmt_str.to_token_stream());
+        if let Some(comma) = maybe_comma {
+            comma.to_tokens(tokens);
+            if !maybe_args.is_empty() {
+                tokens.extend(maybe_args.to_token_stream());
             }
         }
     }
 }
+
+impl fmt::Debug for FormatArgs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, r##""{}""##, self.fmt_str.value())?;
+        if let Some(_comma) = self.maybe_comma {
+            f.write_str(",")?;
+            for pair in self.maybe_args.pairs() {
+                write!(f, "{:?},", pair.value())?;
+            }
+        }
+        Ok(())
+    }
+}
+
+fn format_inner(input: proc_macro2::TokenStream) -> syn::Result<proc_macro2::TokenStream> {
+    let support = support_crate_path();
+    let FormatArgs {
+        fmt_str,
+        maybe_comma: _,
+        maybe_args,
+    } = syn::parse2(input)?;
+
+    // must be (a.b.c -> (language_2_letter_code -> translation_text)* )*
+
+    let path = if let Ok(locale_dir) = std::env::var("I18N_SERIALIZED_TRANSLATIONS") {
+        std::path::PathBuf::from(locale_dir)
+    } else {
+        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("locales")
+    };
+    dbg!(path.display());
+    eprintln!("Reading {}", path.display());
+    let bytes = fs::read(&path).unwrap();
+    let tp2trans_per_locale = i18n_again_support::deserialize(&bytes[..]).unwrap();
+
+    eprintln!("Read {:?}", &tp2trans_per_locale);
+    // Will cause quite a bit of load during compilation for applications with many
+    // invocations, but whatever...
+    let tp = fmt_str.value();
+    let tp = tp.as_str();
+    let translations: &HashMap<String, String> = tp2trans_per_locale.get(tp).ok_or_else(|| {
+        syn::Error::new(
+            Span::call_site(),
+            format!("No translation for \"{tp}\" in {tp2trans_per_locale:?}"),
+        )
+    })?;
+
+    let language = translations.keys();
+    let translation = translations.values().map(|v| v.trim().to_owned());
+    let ts = quote!(
+        match #support::locale() {
+            #( #language => { ::std::format!( #translation, #maybe_args ) }, )*
+            _ => { "<missing translation>".to_owned() }, // TODO FIXME, use a default language
+        }
+    );
+    println!("{s}", s = ts.to_string());
+    Ok(ts)
+}
+
+#[proc_macro]
+pub fn format_t(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    format_inner(proc_macro2::TokenStream::from(input))
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn support_crate_path() -> syn::Path {
+    use proc_macro_crate as pmc;
+    let found_crate = pmc::crate_name("i18n-again")
+        .expect("i18n-again must be present in `Cargo.toml`, but it's not");
+
+    let ident = match found_crate {
+        pmc::FoundCrate::Itself => Ident::new("crate", Span::call_site()),
+        pmc::FoundCrate::Name(name) => Ident::new(&name, Span::call_site()),
+    };
+    syn::Path::from(ident)
+}
+
+#[cfg(test)]
+mod tests;

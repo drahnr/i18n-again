@@ -1,17 +1,57 @@
+use fs::File;
+use fs_err as fs;
 use glob::glob;
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::prelude::*;
+use std::io::Write;
+
+mod prepare;
+pub mod errors;
+
+pub use crate::errors::*;
+pub use crate::prepare::*;
 
 pub type Locale = String;
 pub type Value = serde_json::Value;
 pub type Translations = HashMap<Locale, Value>;
 
-pub fn is_debug() -> bool {
-    std::env::var("RUST_I18N_DEBUG").unwrap_or_else(|_| "0".to_string()) == "1"
+/// Init I18n translations from `build.rs`.
+///
+/// This will load all translations by glob `**/*.yml` from the
+/// given path and prepare a file to be included in the compiled proc macro.
+pub fn load_from_dirs(locale_dir: impl AsRef<std::path::Path>) -> Result<()> {
+    let locale_path = locale_dir.as_ref();
+    let translations = locales_yaml_files_to_translation_map(locale_path)?;
+    let translations = serialize(translations)?;
+
+    fs::write("foo-bar-baz", translations)?;
+
+    Ok(())
+}
+
+/// Path to an translation item
+///
+/// f the for `a.b.c` analogous to `json` addressing.
+pub type TranslationPath = String;
+
+/// Optimize for proc-macro parsing ease,
+/// that's called 1 vs n times more often!
+pub type TranslationMap = HashMap<TranslationPath, HashMap<Locale, String>>;
+
+pub fn deserialize(bytes: &[u8]) -> Result<TranslationMap> {
+    let tmap: TranslationMap = postcard::from_bytes(bytes)?;
+    Ok(tmap)
+}
+
+pub fn serialize(text2translations: TranslationMap) -> Result<Vec<u8>> {
+    let bytes = postcard::to_allocvec(&text2translations)?;
+    Ok(bytes)
 }
 
 /// Merge JSON Values, merge b into a
+///
+/// Overrides values of `a` with values of `b`
+/// and recurses into all objects.
 pub fn merge_value(a: &mut Value, b: &Value) {
     match (a, b) {
         (&mut Value::Object(ref mut a), &Value::Object(ref b)) => {
@@ -25,57 +65,86 @@ pub fn merge_value(a: &mut Value, b: &Value) {
     }
 }
 
-// Load locales into flatten key, value HashMap
-pub fn load_locales<F: Fn(&str) -> bool>(
-    locales_path: &str,
-    ignore_if: F,
-) -> HashMap<String, String> {
-    let mut translations: Translations = HashMap::new();
+fn extract_yaml_content(
+    yaml_content: impl AsRef<str>,
+    trans_map: &mut HashMap<TranslationPath, serde_json::Value>,
+) -> Result<()> {
+    // All translation items per language
+    let trs: Translations = serde_yaml::from_str(yaml_content.as_ref())?;
 
-    let path_pattern = format!("{}/**/*.yml", locales_path);
+    eprintln!("cargo:warning: foo: -- {:?}", &trs);
 
-    if is_debug() {
-        println!("cargo:i18n-locale={}", &path_pattern);
-    }
+    trs.into_iter().for_each(|(tp, translations)| {
+        trans_map
+            .entry(tp)
+            .and_modify(|translations_old| merge_value(translations_old, &translations))
+            .or_insert(translations);
+    });
+    Ok(())
+}
 
-    for entry in glob(&path_pattern).expect("Failed to read glob pattern") {
-        let entry = entry.unwrap();
-        if is_debug() {
-            println!("cargo:i18n-load={}", &entry.display());
+fn trans_map_voodoo(trans_map: HashMap<TranslationPath, serde_json::Value>) -> TranslationMap {
+    let mut tp2trans_per_locale = TranslationMap::new();
+
+    // let mut locale_vars = HashMap::<String, String>::new();
+    // translations.iter().for_each(|(locale, trs)| {
+    //     let new_vars = extract_vars(locale.as_str(), &trs);
+    //     locale_vars.extend(new_vars);
+    // });
+
+    // locale_vars
+
+    trans_map.into_iter().for_each(|(ref locale, trs)| {
+        let new_vars = extract_vars(locale.as_str(), &trs);
+        let new_vars_iter = new_vars.into_iter().filter_map(|(k, v)| {
+            k.strip_prefix(&(locale.to_owned() + "."))
+                .map(move |k| (k.to_string(), v))
+        });
+        for (tp, translation) in new_vars_iter {
+            tp2trans_per_locale
+                .entry(tp)
+                .or_default()
+                .insert(locale.clone(), translation);
         }
+    });
+    tp2trans_per_locale
+}
 
-        if ignore_if(&entry.display().to_string()) {
+// Load locales into flatten key,value HashMap
+pub fn locales_yaml_files_to_translation_map(
+    locales_dir: &std::path::Path,
+) -> Result<TranslationMap> {
+    let mut trans_map = Translations::new();
+
+    let path_pattern = format!("{}/**/*.yml", locales_dir.display());
+
+    println!("cargo:i18n-locale={}", &path_pattern);
+
+    let paths = glob(&path_pattern).expect("Failed to read glob pattern");
+    for maybe_path in paths {
+        let path = if let Ok(path) = maybe_path {
+            path
+        } else {
             continue;
-        }
+        };
+        println!("cargo:i18n-load={}", &path.display());
 
-        let file = File::open(entry).expect("Failed to open the YAML file");
+        let file = File::open(path).expect("Failed to open the YAML file");
         let mut reader = std::io::BufReader::new(file);
         let mut content = String::new();
 
-        reader
-            .read_to_string(&mut content)
-            .expect("Read YAML file failed.");
-
-        let trs: Translations =
-            serde_yaml::from_str(&content).expect("Invalid YAML format, parse error");
-
-        trs.into_iter().for_each(|(k, new_value)| {
-            translations
-                .entry(k)
-                .and_modify(|old_value| merge_value(old_value, &new_value))
-                .or_insert(new_value);
-        });
+        reader.read_to_string(&mut content)?;
+        extract_yaml_content(content, &mut trans_map)?;
     }
 
-    let mut locale_vars = HashMap::<String, String>::new();
-    translations.iter().for_each(|(locale, trs)| {
-        let new_vars = extract_vars(locale.as_str(), &trs);
-        locale_vars.extend(new_vars);
-    });
+    let tp2trans_per_locale = trans_map_voodoo(trans_map);
 
-    locale_vars
+    Ok(tp2trans_per_locale)
 }
 
+/// Find the value based on it's path aka prefix `a.b.c`
+///
+/// Returns a `prefix`:`value` set.
 pub fn extract_vars(prefix: &str, trs: &Value) -> HashMap<String, String> {
     let mut v = HashMap::<String, String>::new();
     let prefix = prefix.to_string();
@@ -106,3 +175,6 @@ pub fn extract_vars(prefix: &str, trs: &Value) -> HashMap<String, String> {
 
     v
 }
+
+#[cfg(test)]
+mod tests;

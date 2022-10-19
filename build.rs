@@ -1,4 +1,4 @@
-// https://github.com/longbridgeapp/rust-i18n/blob/v0.1.6/crates/support/src/lib.rs#L9
+// https://github.com/drahnr/i18n-again/blob/v0.1.6/crates/support/src/lib.rs#L9
 fn workdir(dest: &str) -> Option<String> {
     let seperator = regex::Regex::new(r"(/target/(.+?)/build/)|(\\target\\(.+?)\\build\\)")
         .expect("Invalid regex");
@@ -14,7 +14,7 @@ fn workdir(dest: &str) -> Option<String> {
 fn find_all_yaml_for_cargo_cache() {
     // Do not panic if OUT_DIR or workdir not correct.
     // Because in cargo install OUT_DIR is:
-    // /var/folders/qb/.../T/cargo-installcBf9L5/release/build/rust-i18n-xxx/build-script-build
+    // /var/folders/qb/.../T/cargo-installcBf9L5/release/build/i18n-again-xxx/build-script-build
     let dest = std::env::var("OUT_DIR");
     if dest.is_err() {
         return;

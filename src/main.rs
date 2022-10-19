@@ -3,24 +3,24 @@ use clap::{App, Arg, SubCommand};
 
 use std::{collections::HashMap, path::Path};
 
-use rust_i18n_extract::{extractor, generator, iter};
+use i18n_again_extract::{extractor, generator, iter};
 mod config;
 
 #[macro_use]
 extern crate serde_derive;
 
-fn main() -> Result<(), Error> {
-    let extract_command = SubCommand::with_name("i18n")
-        .about(
-            r#"---------------------------------------
-Rust I18n command for help you simply to extract all untranslated texts from soruce code.
+const ABOUT: &str = r#"
+Rust I18n command for help you simply to extract all untranslated texts from source code.
 
-It will iter all Rust files in and extract all untranslated texts that used `t!` macro.
+It will iter all Rust files in and extract all untranslated texts that used `format_t!` macro.
 And then generate a YAML file and merge for existing texts.
 
-https://github.com/longbridgeapp/rust-i18n
-"#,
-        )
+https://github.com/drahnr/i18n-again
+"#;
+
+fn main() -> Result<(), Error> {
+    let extract_command = SubCommand::with_name("i18n")
+        .about(ABOUT)
         .version(clap::crate_version!())
         .arg(
             Arg::with_name("source")
@@ -28,7 +28,7 @@ https://github.com/longbridgeapp/rust-i18n
                 .default_value("./"),
         );
 
-    let app = App::new("rust-i18n")
+    let app = App::new("i18n-again")
         .bin_name("cargo")
         .subcommand(extract_command)
         .get_matches();
