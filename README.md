@@ -1,10 +1,19 @@
 # Rust I18n
 
-[![CI](https://github.com/drahnr/i18n-again/actions/workflows/ci.yml/badge.svg)](https://github.com/drahnr/i18n-again/actions/workflows/ci.yml) [![Docs](https://docs.rs/i18n-again/badge.svg)](https://docs.rs/i18n-again/) [![Crates.io](https://img.shields.io/crates/v/i18n-again.svg)](https://crates.io/crates/i18n-again)
+⚠️ E X P E R I M E N T A L ⚠️
 
-Rust I18n is a crate for loading localized text from a set of YAML mapping files. The mappings are converted into data readable by Rust programs at compile time, and then localized text can be loaded by simply calling the provided `format_t!` macro.
+[![Docs](https://docs.rs/i18n-again/badge.svg)](https://docs.rs/i18n-again/) [![Crates.io](https://img.shields.io/crates/v/i18n-again.svg)](https://crates.io/crates/i18n-again)
 
-The API of this crate is inspired by [ruby-i18n](https://github.com/ruby-i18n/i18n) and [Rails I18n](https://guides.rubyonrails.org/i18n.html).
+Orignally forked from [rust-i18n](https://github.com/longbridgeapp/rust-i18n) but taking a different approach on injecting.
+
+`format_t!` is the one and only entry point and at the same time, having all translations kept inside the binary and selected at runtime with
+a simple `match` statement. 
+
+TODO:
+
+* [ ] check with multiple crates that use this crate
+* [ ] make tests that use `format_t!` work, and not fail any file lookups
+* [ ] `proc-macro` efficiency is far from good
 
 ## Features
 
@@ -18,7 +27,7 @@ The API of this crate is inspired by [ruby-i18n](https://github.com/ruby-i18n/i1
 Rust I18n also provided a `cargo i18n` command line tool help you process translations.
 
 ```bash
-$ cargo install i18n-again
+cargo install i18n-again
 ```
 
 ## Usage
@@ -32,35 +41,33 @@ i18n-again = "0"
 
 [package.metadata.i18n]
 # The available locales for your application, default: ["en"].
-# available-locales = ["en", "zh-CN"]
+available-locales = ["en", "zh-CN"]
 
 # The default locale, default: "en".
-# default-locale = "en"
+default-locale = "en"
 
 # Path for your translations YAML file, default: "locales".
-# load-path = "locales"
+load-path = "locales"
 ```
 
-Load macro and init translations in `lib.rs`
+Load macro and init translations in `build.rs`
 
 ```rs
-// Load I18n macro, for allow you use `format_t!` macro in anywhere.
-#[macro_use]
-extern crate i18n_again;
-
-// Init translations for current crate.
-i18n!("locales");
+//! build.rs
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    i18n_again_support::prepare_from_manifest()?;
+    Ok(())
+}
 ```
 
 Or you can import by use directly:
 
 ```rs
-// You must import in each files when you wants use `format_t!` macro.
+//! src/lib.rs or src/main.rs
 use i18n_again::format_t;
 
-i18n_again::i18n!("locales");
-
 fn main() {
+    i18n_again::set_locale("de_DE");
     println!("{}", format_t!("hello"));
 }
 ```
@@ -73,8 +80,8 @@ Make sure all YAML files (containing the localized mappings) are located in the 
 ├── Cargo.toml
 ├── locales
 │   ├── en.yml
-│   ├── zh-CN.yml
-│   └── zh-HK.yml
+│   ├── de_DE.yml
+│   └── klingonean.yml
 └── src
     └── main.rs
 ```
