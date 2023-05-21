@@ -1,4 +1,4 @@
-# Rust I18n
+# i18n-again
 
 ⚠️ E X P E R I M E N T A L ⚠️
 
