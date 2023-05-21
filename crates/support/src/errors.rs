@@ -14,10 +14,10 @@ pub enum Error {
 
     #[error(transparent)]
     Yaml(#[from] serde_yaml::Error),
-    
+
     #[error(transparent)]
     EnvVar(#[from] std::env::VarError),
-    
+
     #[error("Missing metadata in manifest file {}", .0.display())]
     ManifestMissingMetadata(std::path::PathBuf),
 

@@ -22,7 +22,7 @@ struct Metadata {
     i18n: I18n,
 }
 
-pub fn prepare_from_manifest() -> Result<()>{
+pub fn prepare_from_manifest() -> Result<()> {
     let dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
     prepare(dir)?;
     Ok(())
@@ -31,21 +31,25 @@ pub fn prepare_from_manifest() -> Result<()>{
 pub fn prepare(manifest_dir: impl AsRef<std::path::Path>) -> Result<()> {
     let manifest_dir = manifest_dir.as_ref();
     let manifest_path = manifest_dir.join("Cargo.toml");
-    let manifest_path = &manifest_path;    
+    let manifest_path = &manifest_path;
     println!(
         "cargo:warning=Using manifest file: {}",
         manifest_path.display()
     );
 
-    let manifest = dbg!(fs_err::read_to_string(manifest_path))?;
-    let manifest: cargo_toml::Manifest<Metadata> = dbg!(toml::from_str(&manifest))?;
-    let pkg = manifest.package.as_ref().ok_or_else(||{
-        Error::ManifestNotPackage(manifest_path.to_owned())
-    })?;
+    let manifest = fs_err::read_to_string(manifest_path)?;
+    let manifest: cargo_toml::Manifest<Metadata> = toml::from_str(&manifest)?;
+    let pkg = manifest
+        .package
+        .as_ref()
+        .ok_or_else(|| Error::ManifestNotPackage(manifest_path.to_owned()))?;
     let name = pkg.name();
-    let metadata = pkg.metadata.as_ref().ok_or_else(|| Error::ManifestMissingMetadata(manifest_path.to_owned()))?;
+    let metadata = pkg
+        .metadata
+        .as_ref()
+        .ok_or_else(|| Error::ManifestMissingMetadata(manifest_path.to_owned()))?;
     let i18n = &metadata.i18n;
-    
+
     let locale_dir = manifest_dir.join(&i18n.load_path);
 
     let serialized = fs_err::canonicalize(&locale_dir)?.join(".i18n-serialize.postcard");
@@ -68,8 +72,6 @@ pub fn prepare(manifest_dir: impl AsRef<std::path::Path>) -> Result<()> {
 
     Ok(())
 }
-
-
 
 /// Init I18n translations.
 ///

@@ -71,7 +71,6 @@
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
-
 mod error;
 pub use error::{Error, Result};
 

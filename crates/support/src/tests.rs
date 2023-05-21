@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 fn test_locale_dir() -> PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../foo/loco/.i18-serialize.postcard")
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../foo/loco/.i18-serialize.postcard")
 }
 
 #[test]

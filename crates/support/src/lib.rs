@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::Write;
 
-mod prepare;
 pub mod errors;
+mod prepare;
 
 pub use crate::errors::*;
 pub use crate::prepare::*;
@@ -69,10 +69,10 @@ fn extract_yaml_content(
     yaml_content: impl AsRef<str>,
     trans_map: &mut HashMap<TranslationPath, serde_json::Value>,
 ) -> Result<()> {
+    eprintln!("Parsing YAML");
+
     // All translation items per language
     let trs: Translations = serde_yaml::from_str(yaml_content.as_ref())?;
-
-    eprintln!("cargo:warning: foo: -- {:?}", &trs);
 
     trs.into_iter().for_each(|(tp, translations)| {
         trans_map
@@ -129,6 +129,7 @@ pub fn locales_yaml_files_to_translation_map(
         };
         println!("cargo:i18n-load={}", &path.display());
 
+        eprintln!("Loading YAML file: {}", path.display());
         let file = File::open(path).expect("Failed to open the YAML file");
         let mut reader = std::io::BufReader::new(file);
         let mut content = String::new();

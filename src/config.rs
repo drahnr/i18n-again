@@ -3,11 +3,11 @@
 //!
 //! See `Manifest::from_slice`.
 use fs_err as fs;
+use i18n_again::Result;
 use itertools::Itertools;
 use std::io;
 use std::io::Read;
 use std::path::Path;
-use i18n_again::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
