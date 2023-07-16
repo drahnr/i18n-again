@@ -175,12 +175,14 @@ fn format_inner(input: proc_macro2::TokenStream) -> syn::Result<proc_macro2::Tok
     } else {
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("locales")
     };
-    dbg!(path.display());
-    eprintln!("Reading {}", path.display());
+    // eprintln!("Reading {}", path.display());
     let bytes = fs::read(&path).unwrap();
     let tp2trans_per_locale = i18n_again_support::deserialize(&bytes[..]).unwrap();
 
-    eprintln!("Read {:?}", &tp2trans_per_locale);
+    // eprintln!("Read {} locales", &tp2trans_per_locale.len());
+    // for (locale, count) in tp2trans_per_locale.iter().map(|(locale, translations)| (locale, translations.len())) {
+    //     eprintln!("Translations[{locale}] {count}");
+    // }
     // Will cause quite a bit of load during compilation for applications with many
     // invocations, but whatever...
     let tp = fmt_str.value();
@@ -197,7 +199,7 @@ fn format_inner(input: proc_macro2::TokenStream) -> syn::Result<proc_macro2::Tok
     let ts = quote!(
         match #support::locale() {
             #( #language => { ::std::format!( #translation, #maybe_args ) }, )*
-            locale => { compile_error!(format!("Missing translation for {tp} in {locale}.")) }, // TODO FIXME, use a default language
+            locale => { panic!("Missing translation for {tp} in {locale}", #tp, locale) }, // TODO FIXME, use a default language
         }
     );
     println!("{s}", s = ts.to_string());
