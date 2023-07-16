@@ -8,7 +8,7 @@ macro_rules! gen_fmtarg_test {
             $x
         })
         .expect("FormatArg must parse. qed");
-        dbg!(fmt_args)
+        fmt_args
     }};
 }
 
@@ -23,7 +23,7 @@ macro_rules! gen_fmtargs_test {
     };
 }
 
-macro_rules! roundtrip {
+macro_rules! roundtrip_test {
     ($ty:ty; $setup:expr ) => {
         let seed: $ty = $setup;
         println!("{:?}", &seed);
@@ -42,7 +42,7 @@ fn roundtrip_fmtarg_ident_eq_ident() {
         eq: Token![=](Span::call_site()),
         ident: Ident::new("alois", Span::mixed_site()),
     };
-    roundtrip!(FormatArg; 
+    roundtrip_test!(FormatArg; 
         sweed);
 }
 
@@ -53,7 +53,7 @@ fn roundtrip_fmtarg_ident_eq_expr() {
         eq: Token![=](Span::call_site()),
         expr: syn::parse2::<syn::Expr>(quote! { { int_a + int_b } }).unwrap(),
     };
-    roundtrip!(FormatArg; 
+    roundtrip_test!(FormatArg; 
         sweed);
 }
 
@@ -78,7 +78,7 @@ fn roundtrip_fmtargs() {
         },
     };
 
-    roundtrip!(FormatArgs; 
+    roundtrip_test!(FormatArgs; 
         sweed);
 }
 

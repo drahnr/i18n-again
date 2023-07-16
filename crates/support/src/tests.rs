@@ -14,7 +14,8 @@ fn full_roundtrip() {
     let dir = test_locale_dir();
     prepare(&dir).unwrap();
 
-    dbg!(super::locales_yaml_files_to_translation_map(&dir).unwrap());
+    let x =super::locales_yaml_files_to_translation_map(&dir).unwrap();
+    println!("{:?}");
 }
 
 #[test]
@@ -35,7 +36,7 @@ en:
 "###;
     let mut trans_map = HashMap::new();
     extract_yaml_content(yaml_content, &mut trans_map);
-    dbg!(trans_map);
+    println!("{trans_map:?}");
 }
 
 #[test]
@@ -49,7 +50,8 @@ fn trans_map_voodoo_works() {
                 "a.very.nested.message": "whatever",
         }),
     );
-    let mut trans_map = dbg!(trans_map_voodoo(json_intermediate));
+    let mut trans_map = trans_map_voodoo(json_intermediate);
+    println!("{trans_map:?}");
     assert_eq!(
         trans_map
             .entry("The table below describes some of those behaviours.".to_owned())
