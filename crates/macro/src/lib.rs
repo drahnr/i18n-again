@@ -199,7 +199,7 @@ fn format_inner(input: proc_macro2::TokenStream) -> syn::Result<proc_macro2::Tok
     let ts = quote!(
         match #support::locale() {
             #( #language => { ::std::format!( #translation, #maybe_args ) }, )*
-            locale => { panic!("Missing translation for {tp} in {locale}", #tp, locale) }, // TODO FIXME, use a default language
+            locale => { panic!("Missing translation in {locale} for {tp}", tp= #tp, locale = locale) }, // TODO FIXME, use a default language
         }
     );
     println!("{s}", s = ts.to_string());
