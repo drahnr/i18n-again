@@ -1,3 +1,4 @@
 en:
   hello: Foo - Hello, World!
+  "hello {a} {b}": "x {a} {b}"
   Rust: Rust Txt
